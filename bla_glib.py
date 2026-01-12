@@ -8,6 +8,7 @@ Requires: pygobject, libglib2.0
 import struct
 import socket
 import threading
+import time
 from gi.repository import GLib
 
 
@@ -24,6 +25,8 @@ class BLAAdvertiserGLib:
         self.sock = None
         self.main_loop = None
         self.timeout_id = None
+        self.last_log = 0.0
+        self.custom_payload = b''
 
         # Build basic AD elements
         self.flags_ad = bytes.fromhex("020106")
@@ -82,7 +85,13 @@ class BLAAdvertiserGLib:
 
     def _build_packet(self):
         """Build packet."""
-        return self.base_header
+        return self.base_header + self.custom_payload
+
+    def set_custom_payload(self, payload: bytes):
+        """Set additional advertising payload (length <= 31 bytes total)."""
+        if len(self.base_header) + len(payload) > 31:
+            raise ValueError('Combined advertising payload exceeds 31 bytes')
+        self.custom_payload = payload
 
     def _advertise_callback(self):
         """Called by GLib timer to send advertisement."""
@@ -90,6 +99,11 @@ class BLAAdvertiserGLib:
             try:
                 packet = self._build_packet()
                 self._set_advertising_data(packet)
+
+                now = time.time()
+                if now - self.last_log >= 0.1:
+                    print(f'Advertising payload: {packet.hex()}')
+                    self.last_log = now
             except Exception:
                 pass
             
@@ -164,11 +178,13 @@ if __name__ == '__main__':
         print('Using GLib main loop for timing (5ms interval)')
         adv.start()
         
-        import time
+        counter = 0
         while True:
-            time.sleep(5)
-            stats = adv.get_stats()
-            print(f'Packets sent: {stats["packets_sent"]}')
+            raw_counter = struct.pack('<I', counter)
+            custom_payload = bytes([len(raw_counter) + 1]) + bytes([0xFF]) + raw_counter
+            adv.set_custom_payload(custom_payload)
+            counter = (counter + 1) & 0xFFFFFFFF
+            time.sleep(0.005)
             
     except KeyboardInterrupt:
         pass
