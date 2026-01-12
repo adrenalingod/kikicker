@@ -35,6 +35,9 @@ class BLA_Payload:
     def team2_scored(self):
         self.score_team_2 += 1  
 
+    def clear_goals(self):
+        self.score_team_1 = 0
+        self.score_team_2 = 0
 
 
     def to_bytes(self) -> bytes:
@@ -50,6 +53,10 @@ class BLA_Payload:
             else:
                 raise ValueError('Invalid bounce data')
         self.clear_bounces()  # Clear bounces after converting to bytes
+        if self.score_team_1 >= 10  or self.score_team_2 >= 10:
+            print("Scores reached 10, Game has ended, resetting scores")
+            self.clear_goals()
+
         payload = bytes(payload_bytes)
         return payload
 

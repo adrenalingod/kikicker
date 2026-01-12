@@ -13,8 +13,4 @@ Installing on a fresh Raspberry Pi 4B/5:
 # Execute program in debug mode (camera)
 python main.py --debug
 
-# Before starting the BT Adv or Receiver
-newgrp bluetooth
-
-sudo apt update
-sudo apt install python3-gi python3-gi-cairo gir1.2-glib-2.0
+# Questions
