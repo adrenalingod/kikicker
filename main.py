@@ -5,6 +5,7 @@ import argparse
 from picamera2 import Picamera2
 from kicker_vision import find_playfield_roi, detect_ball, quantize_to_bits
 from bla import BLAAdvertiser
+from bla_bluezperipheral import BLAAdvertiser_bluez
 from bla_service import FieldModel, BLAService
 from bla_buffer import BLAData
 
@@ -33,7 +34,7 @@ else:
 # Initialize BLA service and advertiser
 field = FieldModel(width=initial_frame_rgb.shape[1], height=initial_frame_rgb.shape[0])
 svc = BLAService(field)
-adv = BLAAdvertiser()  # uses hcitool on Pi
+adv = BLAAdvertiser_bluez()  # uses hcitool on Pi
 adv.start()
 
 try:
