@@ -10,9 +10,9 @@ from picamera2 import Picamera2
 # own libraries
 from kicker_vision import find_playfield_roi, detect_ball, quantize_to_bits
 from bla_glib import BLAAdvertiserGLib
-
+from bla_payload import Bounce
 parser = argparse.ArgumentParser(description='Kicker')
-parser.add_argument('--debug')
+parser.add_argument('--debug', action='store_true') 
 args = parser.parse_args()
 debug = args.debug
 
@@ -34,14 +34,15 @@ else:
     fx, fy, fw, fh = field_roi
 
 # Initialize BLA advertiser and Paload
-adv = BLAAdvertiserGLib(0.005)
+adv = BLAAdvertiserGLib(interval=0.005) 
 adv.start()
 
 payload = BLA_Payload()
 
 try:
-    start_time = time.now()
+    start_time = time.time()
     frame_count = 0
+    bounces = 0
     while True:
 
         frame_rgb = picam2.capture_array()
@@ -52,7 +53,17 @@ try:
             field_x = cx - fx
             field_y = cy - fy
             x_7bit, y_6bit = quantize_to_bits(field_x, field_y, fw, fh)
-
+            
+            if frame_count == 35 or bounces == 4:
+                bounces = 0
+                data = payload.to_bytes()
+                adv.set_custom_payload(data)
+            
+            if frame_count % 10 == 0:
+                bounces += 1
+                payload.add_bounce(Bounce(field_x, field_y, 13, 5))
+                payload.team1_scored()
+                
         if debug:
             window_name = 'Kicker Live'
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)

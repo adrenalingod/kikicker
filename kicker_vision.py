@@ -5,7 +5,7 @@ import numpy as np
 # Ball color in HSV (orange)
 LOWER_ORANGE = np.array([10, 120, 129])
 UPPER_ORANGE = np.array([40, 255, 255])
-MIN_BALL_AREA = 100
+MIN_BALL_AREA = 10
 
 # Field color HSV (green)
 LOWER_GREEN = np.array([30, 50, 30])

@@ -41,24 +41,34 @@ class BLA_Payload:
 
 
     def to_bytes(self) -> bytes:
-        """Convert the entire payload to bytes and consume the bounces."""
+        """Convert the entire payload to bytes (as BLE manufacturer data AD structure) and consume the bounces."""
         # First byte: 4 bits score team 1, 4 bits score team 2
         first_byte = ((self.score_team_1 & 0x0F) << 4) | (self.score_team_2 & 0x0F)
         payload_bytes = bytearray([first_byte])
         
-        # Add bounce data
+        # Add bounce data (limit to fit within 31-byte BLE limit)
+        MAX_RAW_PAYLOAD = 15  # 31 total - 12 header - 2 AD wrapper - 2 company ID = 15 bytes
         for bounce in self.bounces:
             if isinstance(bounce, Bounce):
+                if len(payload_bytes) + 4 > MAX_RAW_PAYLOAD:
+                    break  # Skip bounces that would exceed limit
                 payload_bytes.extend(bounce.to_bytes())
             else:
                 raise ValueError('Invalid bounce data')
         self.clear_bounces()  # Clear bounces after converting to bytes
-        if self.score_team_1 >= 10  or self.score_team_2 >= 10:
+        
+        # Wrap in manufacturer data AD structure: [length, type=0xFF, company_id, data]
+        raw_data = bytes(payload_bytes)
+        company_id = 0x1337  # Custom company ID
+        company_bytes = company_id.to_bytes(2, byteorder='little')
+        manufacturer_payload = company_bytes + raw_data
+        manufacturer_ad = bytes([len(manufacturer_payload) + 1, 0xFF]) + manufacturer_payload
+        
+        if self.score_team_1 >= 10 or self.score_team_2 >= 10:
             print("Scores reached 10, Game has ended, resetting scores")
             self.clear_goals()
 
-        payload = bytes(payload_bytes)
-        return payload
+        return manufacturer_ad
 
     @staticmethod
     def decode_payload(payload: bytes) -> str:

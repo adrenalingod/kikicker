@@ -13,4 +13,12 @@ Installing on a fresh Raspberry Pi 4B/5:
 # Execute program in debug mode (camera)
 python main.py --debug
 
-# Questions
+# Questions Long Deltas
+-- Too many Bluetooth devices
+-- something with bt adapter
+-- power consumption
+
+# Probleme
+-- ROI wird nicht korrekt erfasst cm und layout
+-- BTAdv. Payload wird nicht reingeschrieben
+-- BTAdv. Delta ist Beim Emfangen auf dem LapTop zu hoch 1k-3k ms (Liegt nicht an der hohen Remote Desktop Auslastung)
