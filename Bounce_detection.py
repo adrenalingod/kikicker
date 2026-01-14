@@ -1,57 +1,47 @@
 import math
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 
-class BounceDetector:
-    def __init__(self, angle_threshold_rad: float = 0.25, min_displacement: float = 5.0):
-        """
-        :param angle_threshold_rad: Minimum angular change (radians) to detect bounce
-        :param min_displacement: Minimum pixel displacement to avoid noise
-        """
-        self.angle_threshold = angle_threshold_rad
-        self.min_displacement = min_displacement
-        self._prev_angle: Optional[float] = None
+def normalize_angle(delta: float) -> float:
+    while delta <= -math.pi:
+        delta += 2 * math.pi
+    while delta > math.pi:
+        delta -= 2 * math.pi
+    return delta
 
-    @staticmethod
-    def _normalize_angle(delta: float) -> float:
-        """Normalize angle difference to [-pi, pi]."""
-        while delta <= -math.pi:
-            delta += 2 * math.pi
-        while delta > math.pi:
-            delta -= 2 * math.pi
-        return delta
 
-    def _compute_angle(self, prev_pos: Tuple[float, float],
-                       curr_pos: Tuple[float, float]) -> Optional[float]:
-        """Compute motion angle between two positions."""
-        dx = curr_pos[0] - prev_pos[0]
-        dy = curr_pos[1] - prev_pos[1]
+def compute_angle(
+    prev_pos: Tuple[float, float],
+    curr_pos: Tuple[float, float],
+    min_displacement: float
+) -> Optional[float]:
+    dx = curr_pos[0] - prev_pos[0]
+    dy = curr_pos[1] - prev_pos[1]
 
-        if math.hypot(dx, dy) < self.min_displacement:
-            return None
+    if math.hypot(dx, dy) < min_displacement:
+        return None
 
-        return math.atan2(dy, dx)
+    return math.atan2(dy, dx)
 
-    def update(self, prev_pos: Tuple[float, float],
-               curr_pos: Tuple[float, float]) -> dict:
-        """
-        Update detector with new position.
 
-        :returns: Dictionary with bounce status and angle change (degrees)
-        """
-        curr_angle = self._compute_angle(prev_pos, curr_pos)
+def bounce_detector(
+    prev_pos: Tuple[float, float],
+    curr_pos: Tuple[float, float],
+    prev_angle: Optional[float],
+    angle_threshold_rad: float = 0.25,
+    min_displacement: float = 5.0
+) -> Tuple[Dict, Optional[float]]:
+    curr_angle = compute_angle(prev_pos, curr_pos, min_displacement)
 
-        if curr_angle is None or self._prev_angle is None:
-            self._prev_angle = curr_angle
-            return {"bounce": False}
+    if curr_angle is None or prev_angle is None:
+        return {"bounce": False}, curr_angle
 
-        delta = self._normalize_angle(curr_angle - self._prev_angle)
-        self._prev_angle = curr_angle
+    delta = normalize_angle(curr_angle - prev_angle)
 
-        if abs(delta) >= self.angle_threshold:
-            return {
-                "bounce": True,
-                "angle_change_deg": abs(math.degrees(delta))
-            }
+    if abs(delta) >= angle_threshold_rad:
+        return {
+            "bounce": True,
+            "angle_change_deg": abs(math.degrees(delta))
+        }, curr_angle
 
-        return {"bounce": False}
+    return {"bounce": False}, curr_angle
