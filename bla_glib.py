@@ -172,7 +172,7 @@ class BLAAdvertiserGLib:
 
 
 if __name__ == '__main__':
-    adv = BLAAdvertiserGLib(interval=0.1)
+    adv = BLAAdvertiserGLib(interval=0.005)
     try:
         print('Starting GLib advertiser (requires root).')
         print('Using GLib main loop for timing (5ms interval)')
@@ -184,7 +184,7 @@ if __name__ == '__main__':
             custom_payload = bytes([len(raw_counter) + 1]) + bytes([0xFF]) + raw_counter
             adv.set_custom_payload(custom_payload)
             counter = (counter + 1) & 0xFFFFFFFF
-            time.sleep(0.1)
+            time.sleep(0.05)
             
     except KeyboardInterrupt:
         pass
