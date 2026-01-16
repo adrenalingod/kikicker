@@ -1,15 +1,19 @@
+# libraries
 import time
-import cv2
 import argparse
 
+# hardware libraries
+import cv2
 from picamera2 import Picamera2
+
+# own libraries
 from kicker_vision import find_playfield_roi, detect_ball, quantize_to_bits
-from bla import BLAAdvertiser
-from bla_service import FieldModel, BLAService
-from bla_buffer import BLAData
+from bla_glib import BLAAdvertiserGLib
+from bla_payload import Bounce
+from bla_payload import BLA_Payload
 
 parser = argparse.ArgumentParser(description='Kicker')
-parser.add_argument('--debug', action='store_true', help='Enable debug drawing')
+parser.add_argument('--debug', action='store_true') 
 args = parser.parse_args()
 debug = args.debug
 
@@ -30,23 +34,17 @@ if field_roi is None:
 else:
     fx, fy, fw, fh = field_roi
 
-# Initialize BLA service and advertiser
-field = FieldModel(width=initial_frame_rgb.shape[1], height=initial_frame_rgb.shape[0])
-svc = BLAService(field)
-adv = BLAAdvertiser()  # uses hcitool on Pi
+# Initialize BLA advertiser and Paload
+adv = BLAAdvertiserGLib(interval=0.005) 
 adv.start()
 
+payload = BLA_Payload()
+bounce_state={}
 try:
-    prev_pos = None
-    prev_angle = None
-    last_time = time.time()
-    frame_idx = 0
-    #frame_count = 1
-    #start_time = time.time()
+    start_time = time.time()
+    frame_count = 0
+    bounces = 0
     while True:
-        now = time.time()
-        dt = now - last_time if last_time is not None else 0.0
-        last_time = now
 
         frame_rgb = picam2.capture_array()
 
@@ -56,18 +54,23 @@ try:
             field_x = cx - fx
             field_y = cy - fy
             x_7bit, y_6bit = quantize_to_bits(field_x, field_y, fw, fh)
+            print(x_7bit, y_6bit)
 
-            BLAData.set_initial_coord(x_7bit, y_6bit)
+            bounce_coords = detect_bounce(field_x, field_y, fw, fh, bounce_state)
+            if bounce_coords is not None:
+                bounce_x, bounce_y = bounce_coords
+                print(f"Bounce detected at ({bounce_x}, {bounce_y})")
 
-            res = svc.process_frame(prev_pos, (cx, cy), prev_angle, dt, frame_idx)
-            if res is not None:
-                prev_angle = res.get('angle_rad', prev_angle)
-            prev_pos = (cx, cy)
-            
-            if res.get('bounced'):
-                print(f"Ball: x={field_x:.1f} y={field_y:.1f} 7bit={x_7bit},{y_6bit} speed={res.get('speed') if res else 'NA'} bounced={res.get('bounced') if res else 'NA'}")
-        
-        
+            if frame_count == 35 or bounces == 4:
+                bounces = 0
+                data = payload.to_bytes()
+                adv.set_custom_payload(data)
+          
+            if frame_count % 10 == 0:
+                bounces += 1
+                payload.add_bounce(Bounce(field_x, field_y, 13, 5))
+                payload.team1_scored()
+                
         if debug:
             window_name = 'Kicker Live'
             cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
@@ -82,12 +85,11 @@ try:
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
                 
-            if time.time() - start_time >= 1.0:
-                print(f"FPS: {frame_count}")
-                frame_count = 1
-                start_time = time.time()
-            frame_count += 1
-        frame_idx += 1
+        if time.time() - start_time >= 1.0:
+            print(f"FPS: {frame_count}")
+            frame_count = 1
+            start_time = time.time()
+        frame_count += 1
 
 except KeyboardInterrupt:
     pass
