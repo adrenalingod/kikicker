@@ -1,29 +1,26 @@
-def check_goal_scored(curr_pos, prev_pos, goal_latched):
+def check_goal_scored(curr_pos, goal_latched):
     """
-    Line-crossing goal detection for LEFT TEAM.
-    Goal line: (50,13) -> (79,13)
+    Simple position-based goal detection.
+    If ball is inside goal line region → GOAL.
     Uses FIELD coordinates (pixels).
     """
 
-    if prev_pos is None or goal_latched:
-        return None, goal_latched
+    if goal_latched:
+        return None, True
 
     x, y = curr_pos
-    px, py = prev_pos
 
     # --------------------------------
-    # LEFT TEAM GOAL LINE (HORIZONTAL)
+    # LEFT TEAM GOAL REGION
+    # Line: (50,13) -> (79,13)
     # --------------------------------
-    GOAL_Y = 13
     GOAL_X_MIN = 50
     GOAL_X_MAX = 79
+    GOAL_Y = 13
+    Y_TOLERANCE = 2   # +/- pixels
 
-    # Check X range (ball must be inside goal mouth)
-    if GOAL_X_MIN <= x <= GOAL_X_MAX:
+    if (GOAL_X_MIN <= x <= GOAL_X_MAX and
+        GOAL_Y - Y_TOLERANCE <= y <= GOAL_Y + Y_TOLERANCE):
+        return "TEAM2", True   # Left team scored
 
-        # Check Y crossing (ball moves from field into goal)
-        # Assumption: field is BELOW the goal (y increases downward)
-        if py > GOAL_Y and y <= GOAL_Y:
-            return "TEAM2", True   # Left team scored
-
-    return None, goal_latched
+    return None, False
