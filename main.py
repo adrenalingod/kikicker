@@ -10,14 +10,17 @@ from picamera2 import Picamera2
 from kicker_vision import find_playfield_roi, detect_ball, quantize_to_bits
 from bla_glib import BLAAdvertiserGLib
 from bla_payload import Bounce, BLA_Payload
-from goal_check import check_goal_scored     # <-- ADD THIS
+from bounce import detect_bounce
+from goal_check import check_goal_scored   # goal detection logic
 
 parser = argparse.ArgumentParser(description='Kicker')
 parser.add_argument('--debug', action='store_true')
 args = parser.parse_args()
 debug = args.debug
 
-# Create picamera2 and configuration
+# -------------------------------
+# Camera configuration
+# -------------------------------
 FPS = 120
 picam2 = Picamera2()
 config = picam2.create_preview_configuration(
@@ -29,7 +32,9 @@ picam2.configure(config)
 picam2.start()
 time.sleep(1.0)
 
-# Initial frame and ROI
+# -------------------------------
+# Initial frame & ROI
+# -------------------------------
 initial_frame_rgb = picam2.capture_array()
 field_roi = find_playfield_roi(initial_frame_rgb, debug=debug)
 
@@ -39,7 +44,9 @@ if field_roi is None:
 else:
     fx, fy, fw, fh = field_roi
 
-# Initialize BLA advertiser and Payload
+# -------------------------------
+# BLE advertiser & payload
+# -------------------------------
 adv = BLAAdvertiserGLib(interval=0.005)
 adv.start()
 
@@ -47,7 +54,7 @@ payload = BLA_Payload()
 bounce_state = {}
 
 # -------------------------------
-# ✅ REQUIRED STATE VARIABLES
+# REQUIRED STATE VARIABLES
 # -------------------------------
 prev_pos = None
 goal_latched = False
@@ -68,12 +75,12 @@ try:
             field_x = cx - fx
             field_y = cy - fy
 
-            # Quantized values (ONLY for BLE / debug)
+            # Quantized bits ONLY for BLE/debug
             x_7bit, y_6bit = quantize_to_bits(field_x, field_y, fw, fh)
             print("Ball:", field_x, field_y, "| bits:", x_7bit, y_6bit)
 
             # -------------------------------
-            # ✅ GOAL DETECTION
+            # GOAL DETECTION
             # -------------------------------
             goal, goal_latched = check_goal_scored(
                 curr_pos=(field_x, field_y),
@@ -81,16 +88,24 @@ try:
                 goal_latched=goal_latched
             )
 
-            if goal == "TEAM_1":
+            if goal == "TEAM1":
                 print("⚽ GOAL! TEAM 1 SCORED")
                 payload.team1_scored()
 
-            elif goal == "TEAM_2":
+            elif goal == "TEAM2":
                 print("⚽ GOAL! TEAM 2 SCORED")
                 payload.team2_scored()
 
             # -------------------------------
-            # Bounce detection (unchanged)
+            # Reset goal latch when ball
+            # returns to field center
+            # -------------------------------
+            if goal_latched:
+                if 20 < field_x < fw - 20:
+                    goal_latched = False
+
+            # -------------------------------
+            # Bounce detection
             # -------------------------------
             bounce_coords = detect_bounce(field_x, field_y, fw, fh, bounce_state)
             if bounce_coords is not None:
@@ -110,7 +125,7 @@ try:
                 payload.add_bounce(Bounce(field_x, field_y, 13, 5))
 
             # -------------------------------
-            # ✅ UPDATE PREVIOUS POSITION
+            # UPDATE PREVIOUS POSITION
             # -------------------------------
             prev_pos = (field_x, field_y)
 
