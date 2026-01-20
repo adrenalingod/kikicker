@@ -1,11 +1,7 @@
-"""
-Bounce Detection Module for Foosball Ball Tracking
-Implements velocity-based bounce detection with coordinate tracking
-"""
-
 import math
 from collections import deque
 from typing import Optional, Tuple, Dict
+import numpy as np
 
 def detect_bounce(
     current_x: int,
@@ -13,148 +9,192 @@ def detect_bounce(
     field_width: int,
     field_height: int,
     state: Dict,
-    velocity_threshold: float = 25.0,
-    angle_threshold: float = 50.0,
+    velocity_threshold: float = 15.0,  # Reduced from 25
+    angle_threshold: float = 45.0,     # Reduced from 50
     boundary_margin: int = 25,
-    min_frames_between: int = 4,
-    history_size: int = 6
+    min_frames_between: int = 6,       # Increased from 4
+    min_frames_boundary: int = 3,      # Increased from 0
+    history_size: int = 15,            # Increased from 12
+    min_movement_threshold: float = 2.0,  # NEW: minimum movement to consider
+    noise_filter_size: int = 3         # NEW: smoothing window
 ) -> Optional[Tuple[int, int]]:
     """
-    Detect ball bounces based on velocity changes and trajectory analysis.
-    
-    A bounce is detected when:
-    1. Significant velocity magnitude change occurs (sudden deceleration/acceleration)
-    2. Direction change exceeds threshold (ball changes trajectory)
-    3. Ball is near playfield boundaries (wall/rod collision)
-    
-    Args:
-        current_x: Current ball X coordinate (relative to field)
-        current_y: Current ball Y coordinate (relative to field)
-        field_width: Width of the playfield
-        field_height: Height of the playfield
-        state: Dictionary to maintain state between calls (pass same dict each frame)
-        velocity_threshold: Min velocity change to consider bounce (pixels/frame)
-        angle_threshold: Min direction change angle in degrees
-        boundary_margin: Distance from boundary to consider for bounce (pixels)
-        min_frames_between: Minimum frames between consecutive bounces
-        history_size: Number of recent positions to track
-    
-    Returns:
-        Tuple (x, y) of bounce coordinates if bounce detected, None otherwise
-        
-    Usage:
-        bounce_state = {}  # Initialize once before loop
-        
-        while True:
-            # ... get ball position ...
-            bounce_coords = detect_bounce(field_x, field_y, fw, fh, bounce_state)
-            if bounce_coords is not None:
-                bx, by = bounce_coords
-                print(f"Bounce detected at ({bx}, {by})")
+    Enhanced bounce detection with noise filtering and better static detection
     """
     
-    # Initialize state on first call
+    # ---- 1. Reject garbage coordinates immediately ----
+    if not (0 <= current_x <= field_width and 0 <= current_y <= field_height):
+        return None
+
+    # ---- 2. Initialise state on first call ----
     if 'position_history' not in state:
         state['position_history'] = deque(maxlen=history_size)
         state['frames_since_bounce'] = 0
         state['last_bounce_coords'] = None
+        state['movement_history'] = deque(maxlen=10)  # NEW: track movement patterns
+        state['filtered_positions'] = deque(maxlen=noise_filter_size)  # NEW: smoothing
+
+    # ---- 3. Position smoothing to reduce noise ----
+    state['filtered_positions'].append((current_x, current_y))
     
-    # Add current position to history
-    state['position_history'].append((current_x, current_y))
+    # Simple moving average for noise reduction
+    if len(state['filtered_positions']) >= noise_filter_size:
+        smoothed_x = int(np.mean([pos[0] for pos in state['filtered_positions']]))
+        smoothed_y = int(np.mean([pos[1] for pos in state['filtered_positions']]))
+    else:
+        smoothed_x, smoothed_y = current_x, current_y
+
+    # ---- 4. Book-keeping with smoothed positions ----
+    state['position_history'].append((smoothed_x, smoothed_y))
     state['frames_since_bounce'] += 1
-    
-    # Need at least 3 positions to detect bounce
-    if len(state['position_history']) < 3:
+
+    # Track recent movement for static detection
+    if len(state['position_history']) >= 2:
+        prev_x, prev_y = state['position_history'][-2]
+        movement = math.hypot(smoothed_x - prev_x, smoothed_y - prev_y)
+        state['movement_history'].append(movement)
+
+    # ---- 5. Early exit for static ball ----
+    if len(state['movement_history']) >= 3:
+        recent_movements = list(state['movement_history'])[-3:]
+        avg_movement = np.mean(recent_movements)
+        
+        # If ball is barely moving, ignore bounce detection
+        if avg_movement < min_movement_threshold:
+            return None
+
+    if len(state['position_history']) < 4:  # Increased minimum history
         return None
-    
-    # Don't detect bounce too soon after previous one
-    if state['frames_since_bounce'] < min_frames_between:
+
+    # ---- 6. Enhanced lock-out mechanism ----
+    near_boundary = (
+        smoothed_x <= boundary_margin or
+        smoothed_x >= field_width - boundary_margin or
+        smoothed_y <= boundary_margin or
+        smoothed_y >= field_height - boundary_margin
+    )
+    in_corner = (
+        (smoothed_x <= boundary_margin or smoothed_x >= field_width - boundary_margin) and
+        (smoothed_y <= boundary_margin or smoothed_y >= field_height - boundary_margin)
+    )
+
+    # Dynamic lockout based on recent activity
+    lockout = min_frames_boundary if near_boundary else min_frames_between
+    if state['frames_since_bounce'] < lockout:
         return None
-    
+
+    # ---- 7. Enhanced velocity & angle calculations ----
     history = list(state['position_history'])
-    
-    # Calculate velocities between consecutive positions
     velocities = []
     for i in range(len(history) - 1):
         dx = history[i + 1][0] - history[i][0]
         dy = history[i + 1][1] - history[i][1]
-        velocity = math.sqrt(dx * dx + dy * dy)
-        velocities.append((dx, dy, velocity))
-    
-    # Need at least 2 velocity measurements
-    if len(velocities) < 2:
+        vel_mag = math.hypot(dx, dy)
+        velocities.append((dx, dy, vel_mag))
+
+    if len(velocities) < 3:
         return None
-    
-    # Check for velocity change (bounce signature: sudden deceleration or acceleration)
-    recent_velocities = velocities[-3:] if len(velocities) >= 3 else velocities
+
+    # Use longer window for more reliable velocity calculation
+    recent_velocities = velocities[-4:] if len(velocities) >= 4 else velocities
     velocity_changes = []
-    
     for i in range(len(recent_velocities) - 1):
-        v1 = recent_velocities[i][2]
-        v2 = recent_velocities[i + 1][2]
-        velocity_change = abs(v2 - v1)
-        velocity_changes.append(velocity_change)
+        change = abs(recent_velocities[i + 1][2] - recent_velocities[i][2])
+        velocity_changes.append(change)
     
-    max_velocity_change = max(velocity_changes) if velocity_changes else 0
-    
-    # Check for direction change
-    if len(velocities) >= 2:
-        # Compare velocity directions (last two velocity vectors)
-        dx1, dy1, v1 = velocities[-2]
-        dx2, dy2, v2 = velocities[-1]
+    max_velocity_change = max(velocity_changes) if velocity_changes else 0.0
+
+    # ---- 8. Improved angle calculation ----
+    # Use multiple vector pairs for more robust angle detection
+    angle_changes = []
+    for i in range(max(1, len(recent_velocities) - 2)):
+        dx1, dy1, v1 = recent_velocities[i]
+        dx2, dy2, v2 = recent_velocities[i + 1]
         
-        # Calculate angle between velocity vectors
-        if v1 > 0 and v2 > 0:
-            # Dot product and magnitudes
-            dot_product = dx1 * dx2 + dy1 * dy2
-            cos_angle = dot_product / (v1 * v2)
-            # Clamp to [-1, 1] to handle numerical errors
-            cos_angle = max(-1.0, min(1.0, cos_angle))
+        if v1 > 0.5 and v2 > 0.5:  # Increased minimum velocity threshold
+            dot = dx1 * dx2 + dy1 * dy2
+            cos_angle = max(-1.0, min(1.0, dot / (v1 * v2 + 1e-6)))  # Add small epsilon
             angle_change = math.acos(cos_angle)
-        else:
-            angle_change = 0
+            angle_changes.append(angle_change)
+    
+    avg_angle_change = np.mean(angle_changes) if angle_changes else 0.0
+    max_angle_change = max(angle_changes) if angle_changes else 0.0
+
+    # ---- 9. Adaptive thresholds based on ball speed ----
+    # Adjust thresholds based on recent average velocity
+    recent_avg_velocity = np.mean([v[2] for v in recent_velocities])
+    
+    # Dynamic velocity threshold
+    if recent_avg_velocity < 10:  # Slow moving ball
+        v_thresh = velocity_threshold * 0.7
+    elif recent_avg_velocity > 50:  # Fast moving ball
+        v_thresh = velocity_threshold * 1.3
     else:
-        angle_change = 0
-    
-    # Check if ball is near boundary
-    near_boundary = (
-        current_x <= boundary_margin or 
-        current_x >= field_width - boundary_margin or
-        current_y <= boundary_margin or 
-        current_y >= field_height - boundary_margin
-    )
-    
-    # Bounce detection logic
+        v_thresh = velocity_threshold
+
+    a_thresh = math.radians(angle_threshold)
+
+    # Enhanced corner detection
+    if in_corner:
+        v_thresh *= 0.4  # More sensitive in corners
+        a_thresh *= 0.5
+
+    # ---- 10. Enhanced bounce detection logic ----
     bounce_detected = False
     
     # Primary detection: significant velocity change
-    if max_velocity_change >= velocity_threshold:
+    if max_velocity_change >= v_thresh:
         bounce_detected = True
     
-    # Secondary detection: significant direction change with moderate velocity change
-    elif angle_change >= math.radians(angle_threshold) and max_velocity_change >= velocity_threshold * 0.5:
+    # Secondary detection: moderate velocity change with clear direction change
+    elif (max_velocity_change >= v_thresh * 0.6 and 
+          max_angle_change >= a_thresh * 0.8):
         bounce_detected = True
     
-    # Tertiary detection: near boundary with any significant change
-    elif near_boundary and (max_velocity_change >= velocity_threshold * 0.6 or 
-                            angle_change >= math.radians(angle_threshold * 0.7)):
+    # Boundary detection: lower thresholds near walls
+    elif (near_boundary and 
+          (max_velocity_change >= v_thresh * 0.5 or 
+           max_angle_change >= a_thresh * 0.6)):
         bounce_detected = True
-    
-    # If bounce detected, return coordinates
+
+    # Additional check: look for velocity pattern typical of bounces
+    if not bounce_detected and len(velocity_changes) >= 2:
+        # Check for sudden deceleration followed by acceleration
+        if (velocity_changes[-1] > v_thresh * 0.4 and 
+            velocity_changes[-2] > v_thresh * 0.3):
+            bounce_detected = True
+
     if bounce_detected:
         state['frames_since_bounce'] = 0
-        state['last_bounce_coords'] = (current_x, current_y)
-        return (current_x, current_y)
-    
+        state['last_bounce_coords'] = (smoothed_x, smoothed_y)
+        return (smoothed_x, smoothed_y)
+
     return None
 
 
 def reset_bounce_detector(state: Dict) -> None:
     """
-    Reset the bounce detector state.
-    Call this when ball is lost or tracking is interrupted.
-    
-    Args:
-        state: The state dictionary used in detect_bounce
+    Reset the bounce detector state with enhanced cleanup
     """
     state.clear()
+
+
+# NEW: Additional utility function for debugging
+def get_bounce_metrics(state: Dict) -> Dict:
+    """
+    Get diagnostic information about bounce detection
+    Useful for tuning parameters
+    """
+    if 'movement_history' not in state:
+        return {}
+    
+    return {
+        'avg_movement': np.mean(list(state['movement_history'])) if state['movement_history'] else 0,
+        'frames_since_bounce': state.get('frames_since_bounce', 0),
+        'position_history_length': len(state.get('position_history', [])),
+        'last_bounce': state.get('last_bounce_coords', None)
+    }
+
+
+
+
