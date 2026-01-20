@@ -1,44 +1,63 @@
 def check_goal_scored(curr_pos, prev_pos, goal_latched):
     """
-    Detects a valid goal event based on ball movement direction
-    and entry into the goal region.
-
-    Args:
-        curr_pos (tuple): (x, y) current ball position in field coordinates
-        prev_pos (tuple): (x, y) previous ball position in field coordinates
-        goal_latched (bool): prevents multiple detections per shot
-
+    Goal detection using LINE-CROSSING + RECTANGLE
     Returns:
-        (goal_scored: bool, updated_goal_latched: bool)
+        goal (None | "TEAM_1" | "TEAM_2"),
+        updated_goal_latched
     """
 
-    # Safety check
-    if prev_pos is None or curr_pos is None:
-        return False, goal_latched
+    if curr_pos is None or prev_pos is None:
+        return None, goal_latched
 
     x_curr, y_curr = curr_pos
     x_prev, y_prev = prev_pos
 
-    # Direction of movement
-    dx = x_curr - x_prev
+    # -----------------------------
+    # TEAM 1 GOAL (RIGHT SIDE)
+    # -----------------------------
+    TEAM1_X_MIN = 216
+    TEAM1_X_MAX = 220
+    TEAM1_Y_MIN = 157
+    TEAM1_Y_MAX = 182
 
-    # ---------- GOAL REGION (TUNE IN LAB) ----------
-    LEFT_GOAL_X = 15
-    RIGHT_GOAL_X = 370      # approx fw - 15 for 384 width
-    GOAL_Y_MIN = 60
-    GOAL_Y_MAX = 160
-    # ----------------------------------------------
+    # -----------------------------
+    # TEAM 2 GOAL (LEFT SIDE)
+    # -----------------------------
+    TEAM2_X_MIN = 50
+    TEAM2_X_MAX = 80
+    TEAM2_Y_MIN = 15
+    TEAM2_Y_MAX = 16
 
-    # Must be inside vertical goal opening
-    if not (GOAL_Y_MIN <= y_curr <= GOAL_Y_MAX):
-        return False, goal_latched
+    # -----------------------------
+    # Reset latch if ball leaves all goal areas
+    # -----------------------------
+    if not (
+        (TEAM1_X_MIN <= x_curr <= TEAM1_X_MAX and TEAM1_Y_MIN <= y_curr <= TEAM1_Y_MAX) or
+        (TEAM2_X_MIN <= x_curr <= TEAM2_X_MAX and TEAM2_Y_MIN <= y_curr <= TEAM2_Y_MAX)
+    ):
+        goal_latched = False
 
-    # LEFT GOAL (ball moving left)
-    if x_curr <= LEFT_GOAL_X and dx < 0 and not goal_latched:
-        return True, True
+    if goal_latched:
+        return None, goal_latched
 
-    # RIGHT GOAL (ball moving right)
-    if x_curr >= RIGHT_GOAL_X and dx > 0 and not goal_latched:
-        return True, True
+    # -----------------------------
+    # TEAM 1 SCORES (ball moves RIGHT into Team1 goal)
+    # -----------------------------
+    if (
+        x_prev < TEAM1_X_MIN and
+        TEAM1_X_MIN <= x_curr <= TEAM1_X_MAX and
+        TEAM1_Y_MIN <= y_curr <= TEAM1_Y_MAX
+    ):
+        return "TEAM_1", True
 
-    return False, goal_latched
+    # -----------------------------
+    # TEAM 2 SCORES (ball moves LEFT into Team2 goal)
+    # -----------------------------
+    if (
+        x_prev > TEAM2_X_MAX and
+        TEAM2_X_MIN <= x_curr <= TEAM2_X_MAX and
+        TEAM2_Y_MIN <= y_curr <= TEAM2_Y_MAX
+    ):
+        return "TEAM_2", True
+
+    return None, goal_latched
