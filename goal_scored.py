@@ -1,63 +1,52 @@
+# goalCheck.py
+
+# ================= GOAL LINE DEFINITIONS =================
+# These are FIELD COORDINATES (field_x, field_y)
+
+# Right goal → TEAM 1
+TEAM1_GOAL_LINE_X = 215
+TEAM1_GOAL_Y_MIN = 150
+TEAM1_GOAL_Y_MAX = 190
+
+# Left goal → TEAM 2
+TEAM2_GOAL_LINE_X = 55
+TEAM2_GOAL_Y_MIN = 10
+TEAM2_GOAL_Y_MAX = 30
+
+
 def check_goal_scored(curr_pos, prev_pos, goal_latched):
     """
-    Goal detection using LINE-CROSSING + RECTANGLE
+    Detects goal using line-crossing logic.
+
+    Args:
+        curr_pos (tuple): (field_x, field_y)
+        prev_pos (tuple): (field_x, field_y)
+        goal_latched (bool): prevents double scoring
+
     Returns:
-        goal (None | "TEAM_1" | "TEAM_2"),
-        updated_goal_latched
+        goal (str | None): "TEAM1", "TEAM2", or None
+        goal_latched (bool)
     """
 
-    if curr_pos is None or prev_pos is None:
+    # Cannot detect crossing without previous position
+    if prev_pos is None:
         return None, goal_latched
 
-    x_curr, y_curr = curr_pos
-    x_prev, y_prev = prev_pos
+    cx, cy = curr_pos
+    px, py = prev_pos
 
-    # -----------------------------
-    # TEAM 1 GOAL (RIGHT SIDE)
-    # -----------------------------
-    TEAM1_X_MIN = 216
-    TEAM1_X_MAX = 220
-    TEAM1_Y_MIN = 157
-    TEAM1_Y_MAX = 182
-
-    # -----------------------------
-    # TEAM 2 GOAL (LEFT SIDE)
-    # -----------------------------
-    TEAM2_X_MIN = 50
-    TEAM2_X_MAX = 80
-    TEAM2_Y_MIN = 15
-    TEAM2_Y_MAX = 16
-
-    # -----------------------------
-    # Reset latch if ball leaves all goal areas
-    # -----------------------------
-    if not (
-        (TEAM1_X_MIN <= x_curr <= TEAM1_X_MAX and TEAM1_Y_MIN <= y_curr <= TEAM1_Y_MAX) or
-        (TEAM2_X_MIN <= x_curr <= TEAM2_X_MAX and TEAM2_Y_MIN <= y_curr <= TEAM2_Y_MAX)
-    ):
-        goal_latched = False
-
+    # Prevent double goal detection
     if goal_latched:
         return None, goal_latched
 
-    # -----------------------------
-    # TEAM 1 SCORES (ball moves RIGHT into Team1 goal)
-    # -----------------------------
-    if (
-        x_prev < TEAM1_X_MIN and
-        TEAM1_X_MIN <= x_curr <= TEAM1_X_MAX and
-        TEAM1_Y_MIN <= y_curr <= TEAM1_Y_MAX
-    ):
-        return "TEAM_1", True
+    # ---------------- TEAM 1 GOAL (Right side) ----------------
+    if TEAM1_GOAL_Y_MIN <= cy <= TEAM1_GOAL_Y_MAX:
+        if px < TEAM1_GOAL_LINE_X and cx >= TEAM1_GOAL_LINE_X:
+            return "TEAM1", True
 
-    # -----------------------------
-    # TEAM 2 SCORES (ball moves LEFT into Team2 goal)
-    # -----------------------------
-    if (
-        x_prev > TEAM2_X_MAX and
-        TEAM2_X_MIN <= x_curr <= TEAM2_X_MAX and
-        TEAM2_Y_MIN <= y_curr <= TEAM2_Y_MAX
-    ):
-        return "TEAM_2", True
+    # ---------------- TEAM 2 GOAL (Left side) -----------------
+    if TEAM2_GOAL_Y_MIN <= cy <= TEAM2_GOAL_Y_MAX:
+        if px > TEAM2_GOAL_LINE_X and cx <= TEAM2_GOAL_LINE_X:
+            return "TEAM2", True
 
     return None, goal_latched
