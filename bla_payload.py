@@ -25,7 +25,7 @@ class BLA_Payload:
 
     def add_bounce(self, bounce: Bounce):
         if len(self.bounces) >= 3:
-            raise ValueError('Maximum of 3 bounces allowed (14 byte limit)')
+            self.bounces.pop(0)  # Remove oldest bounce (FIFO)
         self.bounces.append(bounce)
 
     def clear_bounces(self):
