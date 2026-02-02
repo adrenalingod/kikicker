@@ -25,6 +25,10 @@ picam2.configure(config)
 picam2.start()
 time.sleep(1.0)
 
+# Some Hot Magic Number Avoidings
+TEAM_1_SCORED = 0
+TEAM_2_SCORED = 1
+
 # Initial frame and ROI
 initial_frame_rgb = picam2.capture_array()
 field_roi = find_playfield_roi(initial_frame_rgb, debug=debug)
@@ -65,10 +69,6 @@ try:
             x_8bit, y_7bit = quantize_to_bits(field_x, field_y, field_roi['width'], field_roi['height'])
             
             # Determine ball possession based on field position (simple heuristic)
-            if field_x < field_roi['width'] / 2:
-                payload.set_team1_ball_possession()
-            else:
-                payload.set_team2_ball_possession()
             
             if frame_count == 35 or bounces == 3:
                 bounces = 0
@@ -77,7 +77,7 @@ try:
             
             if frame_count % 10 == 0:
                 bounces += 1
-                payload.add_bounce(Bounce(x_8bit, y_7bit, 13, frame_count % 127))
+                payload.add_bounce(Bounce(x_8bit, y_7bit, 13, frame_count % 127, ball_possession))
                 # Simulate scoring for testing
                 if frame_count % 100 == 0:
                     payload.team1_scored()

@@ -27,6 +27,7 @@ class BLAAdvertiserGLib:
         self.timeout_id = None
         self.last_log = 0.0
         self.custom_payload = b''
+        self.last_packet = b''  # Track last sent packet
 
         # Build basic AD elements
         self.flags_ad = bytes.fromhex("020106")
@@ -124,12 +125,16 @@ class BLAAdvertiserGLib:
         if self.running:
             try:
                 packet = self._build_packet()
-                self._set_advertising_data(packet)
+                
+                # Only send if packet has changed
+                if packet != self.last_packet:
+                    self._set_advertising_data(packet)
+                    self.last_packet = packet
 
-                now = time.time()
-                if now - self.last_log >= 0.1:
-                    print(f'Advertising payload: {packet.hex()}')
-                    self.last_log = now
+                    now = time.time()
+                    if now - self.last_log >= 0.1:
+                        print(f'Advertising payload: {packet.hex()}')
+                        self.last_log = now
             except Exception:
                 pass
             
