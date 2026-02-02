@@ -78,6 +78,26 @@ class BLAAdvertiserGLib:
         params = plen + padded
         self._hci_send_cmd(0x08, 0x0008, params)
 
+    def _set_advertising_params(self):
+        """Set advertising parameters."""
+        # Convert interval from seconds to units of 0.625ms
+        interval_units = int(self.interval / 0.000625)
+        min_interval = max(0x0020, min(0x4000, interval_units))  # Clamp to valid range
+        max_interval = min_interval
+        
+        params = struct.pack(
+            '<HHBBB6sBB',
+            min_interval,      # Min interval (2 bytes)
+            max_interval,      # Max interval (2 bytes)
+            0x03,              # ADV_NONCONN_IND (non-connectable, non-scannable) (1 byte)
+            0x00,              # Own address type (public) (1 byte)
+            0x00,              # Peer address type (1 byte)
+            bytes(6),          # Peer address (not used) (6 bytes)
+            0x07,              # All channels (1 byte)
+            0x00               # Filter policy (1 byte)
+        )
+        self._hci_send_cmd(0x08, 0x0006, params)
+    
     def _set_advertise_enable(self, enable: bool):
         """Enable/disable advertising."""
         val = b'\x01' if enable else b'\x00'
@@ -88,10 +108,16 @@ class BLAAdvertiserGLib:
         return self.base_header + self.custom_payload
 
     def set_custom_payload(self, payload: bytes):
-        """Set additional advertising payload (length <= 31 bytes total)."""
-        if len(self.base_header) + len(payload) > 31:
+        """Set additional advertising payload (length <= 31 bytes total).
+        Formats payload as manufacturer-specific data with company ID 0x1337.
+        """
+        # Format as manufacturer data: length + 0xFF + company_id (2 bytes LE) + payload
+        company_id = 0x1337
+        mfg_data = bytes([len(payload) + 3, 0xFF]) + company_id.to_bytes(2, 'little') + payload
+        
+        if len(self.base_header) + len(mfg_data) > 31:
             raise ValueError('Combined advertising payload exceeds 31 bytes')
-        self.custom_payload = payload
+        self.custom_payload = mfg_data
 
     def _advertise_callback(self):
         """Called by GLib timer to send advertisement."""
@@ -138,6 +164,23 @@ class BLAAdvertiserGLib:
         except Exception:
             pass
         
+        # Set advertising parameters
+        try:
+            self._set_advertising_params()
+            print('Advertising parameters configured')
+        except Exception as e:
+            print(f'Failed to set advertising params: {e}')
+            raise
+        
+        # Set initial advertising data
+        try:
+            packet = self._build_packet()
+            self._set_advertising_data(packet)
+            print('Initial advertising data set')
+        except Exception as e:
+            print(f'Failed to set advertising data: {e}')
+            raise
+        
         # Now enable advertising on controller
         try:
             self._set_advertise_enable(True)
@@ -172,7 +215,11 @@ class BLAAdvertiserGLib:
 
 
 if __name__ == '__main__':
+    from bla_payload import BLA_Payload, Bounce
+    
     adv = BLAAdvertiserGLib(interval=0.005)
+    payload = BLA_Payload()
+    
     try:
         print('Starting GLib advertiser (requires root).')
         print('Using GLib main loop for timing (5ms interval)')
@@ -180,11 +227,19 @@ if __name__ == '__main__':
         
         counter = 0
         while True:
-            raw_counter = struct.pack('<I', counter)
-            custom_payload = bytes([len(raw_counter) + 1]) + bytes([0xFF]) + raw_counter
-            adv.set_custom_payload(custom_payload)
+            # Create test payload with scores and bounces
+            payload.add_bounce(Bounce(counter % 255, (counter * 2) % 127, 10, counter % 127))
+            
+            if counter % 10 == 0:
+                payload.team1_scored()
+            if counter % 15 == 0:
+                payload.team2_scored()
+            
+            data = payload.to_bytes()
+            adv.set_custom_payload(data)
+            
             counter = (counter + 1) & 0xFFFFFFFF
-            time.sleep(0.05)
+            time.sleep(0.005)
             
     except KeyboardInterrupt:
         pass

@@ -4,6 +4,7 @@ import time
 import argparse
 from statistics import mean
 
+# enable sudo btmgmt --index 0 find --le --duplicate on
 from bleak import BleakScanner
 from bla_payload import BLA_Payload
 
@@ -112,6 +113,7 @@ async def main():
         stop_event.set()
 
     signal.signal(signal.SIGINT, handle_sigint)
+    
 
     await scanner.start()
     print("Scanning for 'kikicker' advertisements. Press Ctrl+C to stop.")

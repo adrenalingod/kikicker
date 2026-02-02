@@ -10,8 +10,11 @@ Installing on a fresh Raspberry Pi 4B/5:
 7. Download our script: `wget https://raw.githubusercontent.com/kristofvl/kikicker/refs/heads/main/main.py`
 
 
-# Execute program in debug mode (camera)
-python main.py --debug
+# Execute program in debug mode (only works on pi with picamera2)
+python main.py --debug                # Run full programm in full debug mode
+(sudo) python3 BLEScanner.py --raw    # Start Scanning with raw Bytes or Human readable form
+sudo python3 bla_glib.py              # Start Test Advertising
+sudo python3 kicker_vision.py --debug # Run Kicker Vision in debug mode
 
 # Questions Long Deltas
 -- Too many Bluetooth devices
@@ -22,3 +25,16 @@ python main.py --debug
 -- ROI wird nicht korrekt erfasst cm und layout
 -- BTAdv. Payload wird nicht reingeschrieben
 -- BTAdv. Delta ist Beim Emfangen auf dem LapTop zu hoch 1k-3k ms (Liegt nicht an der hohen Remote Desktop Auslastung)
+
+# Langer Deltas, wenn der Pi Advertisements schickt
+# Was ich probiert habe
+- UL  => Windows, Pi1, Pi2  : klappt
+- Pi1 => UL, Pi2            : klappt nicht
+
+Es liegt auf jeden Fall am Sender
+- Wlan der Pi Antenne ausgeschaltet
+- DuplikatFiltering auf dem Empfanger ausgestellt
+- Power Consumption ausgestellt
+
+Screenshot von Pi Empfanger output
+Screenshot von allen Debug Views
