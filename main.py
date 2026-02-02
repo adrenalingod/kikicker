@@ -61,8 +61,8 @@ try:
             # Transform to field-local coordinates
             field_x, field_y = transform_to_field_coordinates(cx, cy, field_roi)
             
-            # Quantize using field dimensions
-            x_7bit, y_6bit = quantize_to_bits(field_x, field_y, field_roi['width'], field_roi['height'])
+            # Quantize using field dimensions (8 bits for x, 7 bits for y)
+            x_8bit, y_7bit = quantize_to_bits(field_x, field_y, field_roi['width'], field_roi['height'])
             
             # Determine ball possession based on field position (simple heuristic)
             if field_x < field_roi['width'] / 2:
@@ -77,7 +77,7 @@ try:
             
             if frame_count % 10 == 0:
                 bounces += 1
-                payload.add_bounce(Bounce(x_7bit, y_6bit, 13, frame_count % 127))
+                payload.add_bounce(Bounce(x_8bit, y_7bit, 13, frame_count % 127))
                 # Simulate scoring for testing
                 if frame_count % 100 == 0:
                     payload.team1_scored()
@@ -110,7 +110,7 @@ try:
             
             if result is not None:
                 cv2.rectangle(display_frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.putText(display_frame, f"{x_7bit},{y_6bit}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                cv2.putText(display_frame, f"{x_8bit},{y_7bit}", (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
                             (0, 255, 0), 2, cv2.LINE_AA)
             cv2.imshow(window_name, display_frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):

@@ -504,6 +504,21 @@ def transform_to_field_coordinates(ball_cx, ball_cy, field_roi):
     return field_x, field_y
 
 
+def quantize_to_bits(field_x, field_y, field_width, field_height):
+    """
+    Maps field-local pixel coordinates to bit representation:
+      - X: 8 bits (0..255)
+      - Y: 7 bits (0..127)
+    """
+    x_8bit = int((field_x / field_width) * 255)
+    y_7bit = int((field_y / field_height) * 127)
+
+    x_8bit = max(0, min(255, x_8bit))
+    y_7bit = max(0, min(127, y_7bit))
+
+    return x_8bit, y_7bit
+
+
 if __name__ == '__main__':
     # Load initial frame
     initial_frame = cv2.imread('initial_frame.png')
