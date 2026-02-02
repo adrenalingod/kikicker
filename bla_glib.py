@@ -127,14 +127,13 @@ class BLAAdvertiserGLib:
                 packet = self._build_packet()
                 
                 # Only send if packet has changed
-                if packet != self.last_packet:
-                    self._set_advertising_data(packet)
-                    self.last_packet = packet
+                self._set_advertising_data(packet)
+                self.last_packet = packet
 
-                    now = time.time()
-                    if now - self.last_log >= 0.1:
-                        print(f'Advertising payload: {packet.hex()}')
-                        self.last_log = now
+                now = time.time()
+                if now - self.last_log >= 0.1:
+                    print(f'Advertising payload: {packet.hex()}')
+                    self.last_log = now
             except Exception:
                 pass
             
@@ -233,7 +232,8 @@ if __name__ == '__main__':
         counter = 0
         while True:
             # Create test payload with scores and bounces
-            payload.add_bounce(Bounce(counter % 255, (counter * 2) % 127, 10, counter % 127))
+            # Ball possesion 0 = Team 1, 1 = Team 2
+            payload.add_bounce(Bounce(counter % 255, (counter * 2) % 127, counter % 127, counter % 2))
             
             if counter % 10 == 0:
                 payload.team1_scored()
