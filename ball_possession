@@ -1,0 +1,29 @@
+def get_ball_possession(bx):
+    """
+    bx: The X coordinate of the bounce point.
+    Returns: (Team Name, Rod Name)
+    """
+    # 1. WHITE GOALIE (Avg X: ~17)
+    if bx < 32:
+        return "WHITE", "GOALIE"
+    # 2. WHITE DEFENDERS (Avg X: ~46)
+    elif 32 <= bx < 60:
+        return "WHITE", "DEFENDERS"
+    # 3. BLACK STRIKERS (Avg X: ~70) - Note: Black strikers are on White's side
+    elif 60 <= bx < 82:
+        return "BLACK", "STRIKERS"
+    # 4. WHITE MIDFIELD (Avg X: ~92)
+    elif 82 <= bx < 105:
+        return "WHITE", "MIDFIELD"
+    # 5. BLACK MIDFIELD (Avg X: ~116)
+    elif 105 <= bx < 133:
+        return "BLACK", "MIDFIELD"
+    # 6. WHITE STRIKERS (Avg X: ~148) - Note: White strikers are on Black's side
+    elif 133 <= bx < 162:
+        return "WHITE", "STRIKERS"
+    # 7. BLACK DEFENDERS (Avg X: ~176)
+    elif 162 <= bx < 190:
+        return "BLACK", "DEFENDERS"
+    # 8. BLACK GOALIE (Avg X: ~203)
+    else:
+        return "BLACK", "GOALIE"
