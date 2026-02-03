@@ -126,9 +126,9 @@ class BLAAdvertiserGLib:
             try:
                 packet = self._build_packet()
                 
-                # Only send if packet has changed
-                self._set_advertising_data(packet)
-                self.last_packet = packet
+                if packet != self.last_packet:
+                    self._set_advertising_data(packet)
+                    self.last_packet = packet
 
                 now = time.time()
                 if now - self.last_log >= 0.1:

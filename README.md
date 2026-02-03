@@ -38,3 +38,9 @@ Es liegt auf jeden Fall am Sender
 
 Screenshot von Pi Empfanger output
 Screenshot von allen Debug Views
+
+# Then run your script
+sudo python3 bla_hcitool.py
+
+# In another terminal, watch actual on-air intervals
+sudo btmon
