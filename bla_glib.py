@@ -1,11 +1,11 @@
 """GLib-based HCI advertiser using GLib's event loop for timing.
 
 Uses GLib main loop for precise timing without busy-waiting.
-Archieves 28ms intervalls if pi4 is not the sender with minimal CPU overhead.
+Archieves 28ms intervals if pi4 is not the sender with minimal CPU overhead.
 
 The most important function is set_custom_payload, which takes a bytes Payload Object and advertises it
 
-Also there is a parameter "interval" that controlls the advertising interval (default 5ms).
+Also there is a parameter "interval" that controls the advertising interval (default 5ms).
 Several tests showed interval::
 20ms -> 130ms
 15ms -> 90ms
@@ -20,7 +20,7 @@ The deltas are 600-1300ms, what makes no sense at all
 Reason for that couldnt be found yet.
 What was tried can be checked in the labs presentation contacting Prof. Van Laerhoven
 
-I would suggest you start all over :(
+I would suggest you start all over with debugging :(
 """
 import struct
 import socket
@@ -42,9 +42,9 @@ class BLAAdvertiserGLib:
         self.sock = None
         self.main_loop = None
         self.timeout_id = None
-        self.last_log = 0.0
         self.custom_payload = b''
         self.last_packet = b''
+        self.counter = 0
 
         # Build basic AD elements
         self.flags_ad = bytes.fromhex("020106")
@@ -144,13 +144,13 @@ class BLAAdvertiserGLib:
                 packet = self._build_packet()
                 
                 if packet != self.last_packet:
+                    self.counter = 0
                     self._set_advertising_data(packet)
                     self.last_packet = packet
-
-                now = time.time()
-                if now - self.last_log >= 0.1:
-                    print(f'Advertising payload: {packet.hex()}')
-                    self.last_log = now
+                    
+                self.counter += 1
+                print(f'Advertising payload: {packet.hex()} {counter}')
+                
             except Exception:
                 pass
             
