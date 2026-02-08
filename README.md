@@ -72,10 +72,10 @@ All commands must be run from the project directory.
 
 ```bash
 # Scan with raw bytes
-sudo python3 BLEScanner.py --raw
+sudo python3 bla_scanner.py --raw
 
 # Scan with human-readable output (default)
-sudo python3 BLEScanner.py
+sudo python3 bla_scanner.py
 ```
 
 ### Test BLE Advertising
@@ -111,14 +111,11 @@ The `--debug` flag enables verbose logging and visual output for development and
 - picamera2 (Raspberry Pi camera library)
 - OpenCV (cv2)
 - BLE libraries (bluez)
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+- GLib
 
 ## License
 
-[Add your license information here]
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
 
