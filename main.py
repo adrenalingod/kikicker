@@ -1,3 +1,12 @@
+"""Main Programm for Kicker
+1. Initializes the camera, 
+2. detects the playfield ROI,
+3. captures distinct frames inside the main loop, 
+4. skips if no ball detected
+5. Does mandatory operations to calculate payload parameters (Score, Bounces)
+6. Fills the payload and advertises it via BLAAdvertiserGLib
+7. If --debug flag is set, also shows the live camera feed with detected ball and ROI overlayed.
+"""
 # libraries
 import time
 import argparse
@@ -24,10 +33,6 @@ config = picam2.create_preview_configuration(raw=picam2.sensor_modes[0], main={"
 picam2.configure(config)
 picam2.start()
 time.sleep(1.0)
-
-# Some Hot Magic Number Avoidings
-TEAM_1_SCORED = 0
-TEAM_2_SCORED = 1
 
 # Initial frame and ROI
 initial_frame_rgb = picam2.capture_array()
@@ -56,7 +61,9 @@ try:
     bounces = 0
     while True:
 
-        frame_rgb = picam2.capture_array()
+        request = picam2.capture_request()
+        frame_rgb = request.make_array("main")
+        request.release()
 
         result = detect_ball(frame_rgb, field_roi, debug=debug)
         if result is not None:
@@ -70,6 +77,8 @@ try:
             
             # Determine ball possession based on field position (simple heuristic)
             
+
+            # Example: How to fill payload and advertise it
             if frame_count == 35 or bounces == 3:
                 bounces = 0
                 data = payload.to_bytes()

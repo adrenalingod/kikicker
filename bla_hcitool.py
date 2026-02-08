@@ -1,10 +1,11 @@
 """Direct HCI-based BLE advertiser for fast advertising intervals.
 
 Uses raw HCI socket commands to bypass BlueZ D-Bus restrictions.
-Configures non-connectable undirected advertising (Type 0x03) for
-broadcast-only operation.
 
-Requires: root privileges
+Does the same thing as bla_glib.py but without GLib, using a simple thread and time.sleep for timing.
+This is less precise than bla_glib.py but simpler and more portable (no GLib dependency
+
+Was just used for testing and debugging, not the final choice for the project).
 """
 import struct
 import socket

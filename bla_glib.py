@@ -1,9 +1,26 @@
 """GLib-based HCI advertiser using GLib's event loop for timing.
 
 Uses GLib main loop for precise timing without busy-waiting.
-Can achieve consistent sub-10ms intervals with minimal CPU overhead.
+Archieves 28ms intervalls if pi4 is not the sender with minimal CPU overhead.
 
-Requires: pygobject, libglib2.0
+The most important function is set_custom_payload, which takes a bytes Payload Object and advertises it
+
+Also there is a parameter "interval" that controlls the advertising interval (default 5ms).
+Several tests showed interval::
+20ms -> 130ms
+15ms -> 90ms
+10ms -> 58ms
+5ms -> 25ms
+1ms -> 22ms (not worth the extra CPU load)
+
+For me it makes sense to stay on 5ms.
+Doesnt work on reliably on pi4 as sender.
+The deltas are 600-1300ms, what makes no sense at all
+
+Reason for that couldnt be found yet.
+What was tried can be checked in the labs presentation contacting Prof. Van Laerhoven
+
+I would suggest you start all over :(
 """
 import struct
 import socket
@@ -27,7 +44,7 @@ class BLAAdvertiserGLib:
         self.timeout_id = None
         self.last_log = 0.0
         self.custom_payload = b''
-        self.last_packet = b''  # Track last sent packet
+        self.last_packet = b''
 
         # Build basic AD elements
         self.flags_ad = bytes.fromhex("020106")

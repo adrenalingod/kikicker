@@ -1,4 +1,19 @@
-# kicker_vision.py
+""" Kicker Vision Module has 2 Main functionalities:
+1. Detecting the playfield ROI using template matching with rotation, scaling and translation support.
+2. Detecting the ball based on its orange upper and lower color in HSV space but only if the orange object is inside the ROI.
+
+3. Transforming the detected ball position from image coordinates to field-local coordinates relative to the detected ROI. Used also for the Payload.
+
+Marking the playfield with distinct colors and detecting the ROI By them is for sure a lot faster. Template Matching was just done by interest and because color conditions changed too frequently during testing.
+Change these two parameters to really make it take a while:
+
+rotation:
+rotation_range=2
+rotation_step=2
+
+In this constellation it just checks -2, 0 and +2 degrees.
+
+"""
 import cv2
 import numpy as np
 
@@ -27,7 +42,7 @@ def load_template(template_path='TrueRoi.png'):
     return template, template_edges
 
 
-def find_playfield_roi(image, debug=False, template_path='TrueRoi.png', rotation_range=2, rotation_step=2):
+def find_playfield_roi(image, debug=False, template_path='TrueRoi.png', rotation_range=2, rotation_step=0.17):
     """
     Finds the playfield ROI using template matching with rotation support.
     
@@ -101,7 +116,7 @@ def find_playfield_roi(image, debug=False, template_path='TrueRoi.png', rotation
     best_rotation = 0.0
     best_method = None
     
-    methods = [cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR_NORMED]
+    methods = [cv2.TM_CCORR_NORMED] # [cv2.TM_CCOEFF_NORMED, cv2.TM_CCORR_NORMED]
     scales = np.linspace(min_scale, max_scale, 25)
     
     # Generate rotation angles to test

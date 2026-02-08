@@ -1,3 +1,16 @@
+"""BLA_Payload: Payload structure for broadcasting game state in BLE advertisements.
+
+Consists of a BLA_Payload class that encapsulates the game state (scores 1Byte and up to 3 bounces Up each 4 Bytes) and a Bounce class that represents individual bounce events with position, speed, frame number, and ball possession.
+
+The most important functions are:
+addBounce - to add a bounce event to the payload
+team1_scored and team2_scored - to update the scores
+to_bytes - to convert the payload to bytes to make it compatible with GLib set_custom_payload
+decode_payload - to convert raw payload bytes back into a human-readable summary (used for debugging and in BLEScanner)
+
+B
+"""
+
 class Bounce:
     def __init__(self, x_coord=0, y_coord=0, speed=0, frame_number=0, ball_possession=0):
         self.x_coord = x_coord  # 8 bits

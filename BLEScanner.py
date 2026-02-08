@@ -1,3 +1,18 @@
+"""BLEScanner.py - Scan for BLE advertisements from "kikicker" devices and analyze payloads.
+
+Uses the Bleak library for cross-platform BLE scanning. Decodes manufacturer data payloads based on a custom format defined in bla_payload.py.
+
+It was tested on Windows, Ubuntu, and Raspberry Pi OS.
+
+It scans for:
+TARGET_NAME = "kikicker"
+TARGET_COMPANY_ID = 0x1337
+
+It measures only deltas between distinct advertisements
+
+It also has a --raw mode for hex output and a human-readable mode that decodes the payload into a structured format.
+
+"""
 import asyncio
 import signal
 import time

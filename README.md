@@ -15,32 +15,3 @@ python main.py --debug                # Run full programm in full debug mode
 (sudo) python3 BLEScanner.py --raw    # Start Scanning with raw Bytes or Human readable form
 sudo python3 bla_glib.py              # Start Test Advertising
 sudo python3 kicker_vision.py --debug # Run Kicker Vision in debug mode
-
-# Questions Long Deltas
--- Too many Bluetooth devices
--- something with bt adapter
--- power consumption
-
-# Probleme
--- ROI wird nicht korrekt erfasst cm und layout
--- BTAdv. Payload wird nicht reingeschrieben
--- BTAdv. Delta ist Beim Emfangen auf dem LapTop zu hoch 1k-3k ms (Liegt nicht an der hohen Remote Desktop Auslastung)
-
-# Langer Deltas, wenn der Pi Advertisements schickt
-# Was ich probiert habe
-- UL  => Windows, Pi1, Pi2  : klappt
-- Pi1 => UL, Pi2            : klappt nicht
-
-Es liegt auf jeden Fall am Sender
-- Wlan der Pi Antenne ausgeschaltet
-- DuplikatFiltering auf dem Empfanger ausgestellt
-- Power Consumption ausgestellt
-
-Screenshot von Pi Empfanger output
-Screenshot von allen Debug Views
-
-# Then run your script
-sudo python3 bla_hcitool.py
-
-# In another terminal, watch actual on-air intervals
-sudo btmon
