@@ -1,7 +1,148 @@
+"""
+Bounce Detection Module for Foosball Ball Tracking
+Implements precise velocity-based bounce detection with strict duplicate prevention
+Pure function-based implementation using state dictionary
+"""
+
 import math
 from collections import deque
-from typing import Optional, Tuple, Dict
-import numpy as np
+from typing import Optional, Tuple, Dict, List
+
+
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def _calculate_velocity(pos1: Tuple[int, int], pos2: Tuple[int, int]) -> Tuple[float, float, float]:
+    """
+    Calculate velocity vector between two positions.
+    
+    Args:
+        pos1: Previous position (x, y)
+        pos2: Current position (x, y)
+    
+    Returns:
+        Tuple of (dx, dy, magnitude)
+    """
+    dx = pos2[0] - pos1[0]
+    dy = pos2[1] - pos1[1]
+    magnitude = math.hypot(dx, dy)
+    return dx, dy, magnitude
+
+
+def _calculate_distance(pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
+    """
+    Calculate Euclidean distance between two positions.
+    
+    Args:
+        pos1: First position (x, y)
+        pos2: Second position (x, y)
+    
+    Returns:
+        Distance in pixels
+    """
+    dx = pos2[0] - pos1[0]
+    dy = pos2[1] - pos1[1]
+    return math.hypot(dx, dy)
+
+
+def _is_near_boundary(
+    x: int, 
+    y: int, 
+    field_width: int, 
+    field_height: int, 
+    boundary_margin: int
+) -> Tuple[bool, bool]:
+    """
+    Check if position is near boundary or corner.
+    
+    Args:
+        x: X coordinate
+        y: Y coordinate
+        field_width: Width of playfield
+        field_height: Height of playfield
+        boundary_margin: Distance from edge to consider as boundary
+    
+    Returns:
+        Tuple of (near_boundary, in_corner)
+    """
+    near_left = x <= boundary_margin
+    near_right = x >= field_width - boundary_margin
+    near_top = y <= boundary_margin
+    near_bottom = y >= field_height - boundary_margin
+    
+    near_boundary = near_left or near_right or near_top or near_bottom
+    in_corner = (near_left or near_right) and (near_top or near_bottom)
+    
+    return near_boundary, in_corner
+
+
+def _calculate_angle_change(
+    vel1: Tuple[float, float, float], 
+    vel2: Tuple[float, float, float]
+) -> float:
+    """
+    Calculate angle change between two velocity vectors.
+    
+    Args:
+        vel1: First velocity (dx, dy, magnitude)
+        vel2: Second velocity (dx, dy, magnitude)
+    
+    Returns:
+        Angle change in radians
+    """
+    dx1, dy1, mag1 = vel1
+    dx2, dy2, mag2 = vel2
+    
+    if mag1 < 0.1 or mag2 < 0.1:
+        return 0.0
+    
+    # Dot product for angle calculation
+    dot = dx1 * dx2 + dy1 * dy2
+    cos_angle = max(-1.0, min(1.0, dot / (mag1 * mag2)))
+    angle = math.acos(cos_angle)
+    
+    return angle
+
+
+def _find_precise_bounce_location(
+    position_history: deque, 
+    velocity_history: deque
+) -> Tuple[int, int]:
+    """
+    Determine the most likely bounce location from recent history.
+    Uses the position where velocity change was maximum.
+    
+    Args:
+        position_history: Deque of recent positions
+        velocity_history: Deque of recent velocities
+    
+    Returns:
+        Coordinates (x, y) of bounce location
+    """
+    if len(velocity_history) < 2:
+        return position_history[-1]
+    
+    # Find position with maximum velocity change
+    max_change_idx = 0
+    max_change = 0.0
+    
+    vel_list = list(velocity_history)
+    for i in range(len(vel_list) - 1):
+        change = abs(vel_list[i + 1][2] - vel_list[i][2])
+        if change > max_change:
+            max_change = change
+            max_change_idx = i + 1
+    
+    # Return position corresponding to max velocity change
+    # Look back in position history to find the exact frame
+    bounce_idx = min(max_change_idx, len(position_history) - 1)
+    return position_history[bounce_idx]
+
+
+# ============================================================================
+# Main Bounce Detection Function
+# ============================================================================
 
 def detect_bounce(
     current_x: int,
@@ -9,192 +150,308 @@ def detect_bounce(
     field_width: int,
     field_height: int,
     state: Dict,
-    velocity_threshold: float = 15.0,  # Reduced from 25
-    angle_threshold: float = 45.0,     # Reduced from 50
+    velocity_threshold: float = 25.0,
+    angle_threshold: float = 50.0,
     boundary_margin: int = 25,
-    min_frames_between: int = 6,       # Increased from 4
-    min_frames_boundary: int = 3,      # Increased from 0
-    history_size: int = 15,            # Increased from 12
-    min_movement_threshold: float = 2.0,  # NEW: minimum movement to consider
-    noise_filter_size: int = 3         # NEW: smoothing window
+    min_frames_between: int = 8,
+    min_frames_boundary: int = 4,
+    history_size: int = 15,
+    min_bounce_distance: int = 15
 ) -> Optional[Tuple[int, int]]:
     """
-    Enhanced bounce detection with noise filtering and better static detection
+    Detect ball bounces based on velocity changes and trajectory analysis.
+    
+    This function maintains state across calls using the provided state dictionary.
+    It tracks:
+    - Previous position: Ball location in last frame
+    - Current position: Ball location in this frame  
+    - Bounce position: Exact location where bounce occurred
+    - Complete position history for trajectory analysis
+    
+    A bounce is detected when:
+    1. Significant velocity magnitude change occurs (sudden deceleration/acceleration)
+    2. Direction change exceeds threshold (ball changes trajectory)
+    3. Ball is near playfield boundaries (wall/rod collision)
+    
+    Duplicate Prevention:
+    - Bounces at the same location (within min_bounce_distance) are ignored
+    - Minimum frame lockout prevents rapid re-detection
+    - Only reports unique bounce locations
+    
+    Args:
+        current_x: Current ball X coordinate (relative to field, MUST be inside [0…field_width])
+        current_y: Current ball Y coordinate (relative to field, MUST be inside [0…field_height])
+        field_width: Width of the playfield
+        field_height: Height of the playfield
+        state: Dictionary to maintain state between calls (pass same dict each frame)
+        velocity_threshold: Min velocity change to consider bounce (pixels/frame)
+        angle_threshold: Min direction change angle in degrees
+        boundary_margin: Distance from boundary to consider for bounce (pixels)
+        min_frames_between: Minimum frames between consecutive bounces (inside field, default: 8)
+        min_frames_boundary: Minimum frames between consecutive bounces (at boundary, default: 4)
+        history_size: Number of recent positions to track
+        min_bounce_distance: Minimum distance between bounces to prevent duplicates (pixels, default: 15)
+        
+    Returns:
+        Tuple (x, y) of precise bounce coordinates if detected, None otherwise
+        Returns None if bounce is a duplicate (same location as last bounce)
+        
+    State Dictionary Contents:
+        - position_history: Deque of recent (x, y) positions
+        - velocity_history: Deque of recent (dx, dy, magnitude) velocities
+        - previous_position: Last frame's (x, y) position
+        - frames_since_bounce: Counter for lockout period
+        - last_bounce_coords: Last detected bounce (x, y)
+        - bounce_history: List of all detected bounces with metadata
     """
     
-    # ---- 1. Reject garbage coordinates immediately ----
+    # ---- 1. Validate coordinates ----
     if not (0 <= current_x <= field_width and 0 <= current_y <= field_height):
         return None
-
-    # ---- 2. Initialise state on first call ----
+    
+    # ---- 2. Initialize state on first call ----
     if 'position_history' not in state:
         state['position_history'] = deque(maxlen=history_size)
+        state['velocity_history'] = deque(maxlen=history_size - 1)
+        state['previous_position'] = None
         state['frames_since_bounce'] = 0
         state['last_bounce_coords'] = None
-        state['movement_history'] = deque(maxlen=10)  # NEW: track movement patterns
-        state['filtered_positions'] = deque(maxlen=noise_filter_size)  # NEW: smoothing
-
-    # ---- 3. Position smoothing to reduce noise ----
-    state['filtered_positions'].append((current_x, current_y))
+        state['bounce_history'] = []
     
-    # Simple moving average for noise reduction
-    if len(state['filtered_positions']) >= noise_filter_size:
-        smoothed_x = int(np.mean([pos[0] for pos in state['filtered_positions']]))
-        smoothed_y = int(np.mean([pos[1] for pos in state['filtered_positions']]))
-    else:
-        smoothed_x, smoothed_y = current_x, current_y
-
-    # ---- 4. Book-keeping with smoothed positions ----
-    state['position_history'].append((smoothed_x, smoothed_y))
+    current_pos = (current_x, current_y)
+    
+    # ---- 3. Update position and velocity history ----
+    if state['previous_position'] is not None:
+        velocity = _calculate_velocity(state['previous_position'], current_pos)
+        state['velocity_history'].append(velocity)
+    
+    state['position_history'].append(current_pos)
+    state['previous_position'] = current_pos
     state['frames_since_bounce'] += 1
-
-    # Track recent movement for static detection
-    if len(state['position_history']) >= 2:
-        prev_x, prev_y = state['position_history'][-2]
-        movement = math.hypot(smoothed_x - prev_x, smoothed_y - prev_y)
-        state['movement_history'].append(movement)
-
-    # ---- 5. Early exit for static ball ----
-    if len(state['movement_history']) >= 3:
-        recent_movements = list(state['movement_history'])[-3:]
-        avg_movement = np.mean(recent_movements)
-        
-        # If ball is barely moving, ignore bounce detection
-        if avg_movement < min_movement_threshold:
-            return None
-
-    if len(state['position_history']) < 4:  # Increased minimum history
+    
+    # ---- 4. Need minimum history ----
+    if len(state['position_history']) < 3 or len(state['velocity_history']) < 2:
         return None
-
-    # ---- 6. Enhanced lock-out mechanism ----
-    near_boundary = (
-        smoothed_x <= boundary_margin or
-        smoothed_x >= field_width - boundary_margin or
-        smoothed_y <= boundary_margin or
-        smoothed_y >= field_height - boundary_margin
+    
+    # ---- 5. Check lockout period (adaptive based on location) ----
+    near_boundary, in_corner = _is_near_boundary(
+        current_x, current_y, field_width, field_height, boundary_margin
     )
-    in_corner = (
-        (smoothed_x <= boundary_margin or smoothed_x >= field_width - boundary_margin) and
-        (smoothed_y <= boundary_margin or smoothed_y >= field_height - boundary_margin)
-    )
-
-    # Dynamic lockout based on recent activity
     lockout = min_frames_boundary if near_boundary else min_frames_between
+    
     if state['frames_since_bounce'] < lockout:
         return None
-
-    # ---- 7. Enhanced velocity & angle calculations ----
-    history = list(state['position_history'])
-    velocities = []
-    for i in range(len(history) - 1):
-        dx = history[i + 1][0] - history[i][0]
-        dy = history[i + 1][1] - history[i][1]
-        vel_mag = math.hypot(dx, dy)
-        velocities.append((dx, dy, vel_mag))
-
-    if len(velocities) < 3:
-        return None
-
-    # Use longer window for more reliable velocity calculation
-    recent_velocities = velocities[-4:] if len(velocities) >= 4 else velocities
-    velocity_changes = []
-    for i in range(len(recent_velocities) - 1):
-        change = abs(recent_velocities[i + 1][2] - recent_velocities[i][2])
-        velocity_changes.append(change)
+    
+    # ---- 6. Analyze velocity changes ----
+    vel_list = list(state['velocity_history'])
+    
+    # Calculate recent velocity changes
+    recent_window = min(4, len(vel_list))
+    recent_vels = vel_list[-recent_window:]
+    
+    velocity_changes = [
+        abs(recent_vels[i + 1][2] - recent_vels[i][2])
+        for i in range(len(recent_vels) - 1)
+    ]
     
     max_velocity_change = max(velocity_changes) if velocity_changes else 0.0
-
-    # ---- 8. Improved angle calculation ----
-    # Use multiple vector pairs for more robust angle detection
-    angle_changes = []
-    for i in range(max(1, len(recent_velocities) - 2)):
-        dx1, dy1, v1 = recent_velocities[i]
-        dx2, dy2, v2 = recent_velocities[i + 1]
-        
-        if v1 > 0.5 and v2 > 0.5:  # Increased minimum velocity threshold
-            dot = dx1 * dx2 + dy1 * dy2
-            cos_angle = max(-1.0, min(1.0, dot / (v1 * v2 + 1e-6)))  # Add small epsilon
-            angle_change = math.acos(cos_angle)
-            angle_changes.append(angle_change)
     
-    avg_angle_change = np.mean(angle_changes) if angle_changes else 0.0
-    max_angle_change = max(angle_changes) if angle_changes else 0.0
-
-    # ---- 9. Adaptive thresholds based on ball speed ----
-    # Adjust thresholds based on recent average velocity
-    recent_avg_velocity = np.mean([v[2] for v in recent_velocities])
+    # ---- 7. Calculate direction change ----
+    angle_change = _calculate_angle_change(vel_list[-2], vel_list[-1])
     
-    # Dynamic velocity threshold
-    if recent_avg_velocity < 10:  # Slow moving ball
-        v_thresh = velocity_threshold * 0.7
-    elif recent_avg_velocity > 50:  # Fast moving ball
-        v_thresh = velocity_threshold * 1.3
-    else:
-        v_thresh = velocity_threshold
-
+    # ---- 8. Adaptive thresholds based on location ----
+    v_thresh = velocity_threshold
     a_thresh = math.radians(angle_threshold)
-
-    # Enhanced corner detection
-    if in_corner:
-        v_thresh *= 0.4  # More sensitive in corners
-        a_thresh *= 0.5
-
-    # ---- 10. Enhanced bounce detection logic ----
-    bounce_detected = False
     
-    # Primary detection: significant velocity change
+    # Relax thresholds for corners and boundaries
+    if in_corner:
+        v_thresh *= 0.5
+        a_thresh *= 0.6
+    elif near_boundary:
+        v_thresh *= 0.7
+        a_thresh *= 0.75
+    
+    # ---- 9. Bounce detection logic ----
+    bounce_detected = False
+    bounce_type = None
+    
+    # Strong velocity change
     if max_velocity_change >= v_thresh:
         bounce_detected = True
+        bounce_type = "velocity_change"
     
-    # Secondary detection: moderate velocity change with clear direction change
-    elif (max_velocity_change >= v_thresh * 0.6 and 
-          max_angle_change >= a_thresh * 0.8):
+    # Significant direction change with moderate velocity change
+    elif angle_change >= a_thresh and max_velocity_change >= v_thresh * 0.5:
         bounce_detected = True
+        bounce_type = "direction_change"
     
-    # Boundary detection: lower thresholds near walls
-    elif (near_boundary and 
-          (max_velocity_change >= v_thresh * 0.5 or 
-           max_angle_change >= a_thresh * 0.6)):
-        bounce_detected = True
-
-    # Additional check: look for velocity pattern typical of bounces
-    if not bounce_detected and len(velocity_changes) >= 2:
-        # Check for sudden deceleration followed by acceleration
-        if (velocity_changes[-1] > v_thresh * 0.4 and 
-            velocity_changes[-2] > v_thresh * 0.3):
+    # Boundary bounce with relaxed thresholds
+    elif near_boundary:
+        if max_velocity_change >= v_thresh * 0.6 or angle_change >= a_thresh * 0.7:
             bounce_detected = True
-
+            bounce_type = "boundary_bounce"
+    
+    # Combined indicator: sudden deceleration + direction change
+    elif max_velocity_change >= v_thresh * 0.6 and angle_change >= a_thresh * 0.6:
+        bounce_detected = True
+        bounce_type = "combined"
+    
+    # ---- 10. Register bounce if detected ----
     if bounce_detected:
+        # Find precise bounce location (not just current position)
+        bounce_coords = _find_precise_bounce_location(
+            state['position_history'], 
+            state['velocity_history']
+        )
+        
+        # ---- 11. DUPLICATE PREVENTION CHECK ----
+        # Check if this bounce is too close to the last detected bounce
+        if state['last_bounce_coords'] is not None:
+            distance_from_last = _calculate_distance(state['last_bounce_coords'], bounce_coords)
+            
+            # If bounce is within min_bounce_distance of last bounce, it's a duplicate
+            if distance_from_last < min_bounce_distance:
+                # This is a duplicate - do NOT report it
+                # But DO reset the lockout timer to prevent continuous false detections
+                state['frames_since_bounce'] = 0
+                return None
+        
+        # ---- 12. This is a valid, unique bounce ----
+        # Update state
         state['frames_since_bounce'] = 0
-        state['last_bounce_coords'] = (smoothed_x, smoothed_y)
-        return (smoothed_x, smoothed_y)
-
+        state['last_bounce_coords'] = bounce_coords
+        
+        # Store in history for analysis
+        bounce_info = {
+            'coords': bounce_coords,
+            'type': bounce_type,
+            'velocity_change': max_velocity_change,
+            'angle_change': math.degrees(angle_change),
+            'near_boundary': near_boundary,
+            'in_corner': in_corner
+        }
+        state['bounce_history'].append(bounce_info)
+        
+        return bounce_coords
+    
     return None
 
 
+# ============================================================================
+# Utility Functions
+# ============================================================================
+
 def reset_bounce_detector(state: Dict) -> None:
     """
-    Reset the bounce detector state with enhanced cleanup
+    Reset the bounce detector state.
+    Call this when ball is lost or tracking is interrupted.
+    
+    Args:
+        state: State dictionary used in detect_bounce()
     """
     state.clear()
 
 
-# NEW: Additional utility function for debugging
-def get_bounce_metrics(state: Dict) -> Dict:
+def get_bounce_history(state: Dict) -> List[Dict]:
     """
-    Get diagnostic information about bounce detection
-    Useful for tuning parameters
-    """
-    if 'movement_history' not in state:
-        return {}
+    Get history of all detected bounces with metadata.
     
-    return {
-        'avg_movement': np.mean(list(state['movement_history'])) if state['movement_history'] else 0,
-        'frames_since_bounce': state.get('frames_since_bounce', 0),
-        'position_history_length': len(state.get('position_history', [])),
-        'last_bounce': state.get('last_bounce_coords', None)
-    }
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        List of bounce information dictionaries containing:
+        - coords: (x, y) bounce location
+        - type: bounce detection type (velocity_change, direction_change, boundary_bounce, combined)
+        - velocity_change: magnitude of velocity change (pixels/frame)
+        - angle_change: direction change in degrees
+        - near_boundary: whether bounce was near boundary
+        - in_corner: whether bounce was in corner
+    """
+    return state.get('bounce_history', []).copy()
 
 
+def get_position_history(state: Dict) -> List[Tuple[int, int]]:
+    """
+    Get recent position history.
+    
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        List of (x, y) positions in chronological order
+    """
+    history = state.get('position_history', deque())
+    return list(history)
 
 
+def get_previous_position(state: Dict) -> Optional[Tuple[int, int]]:
+    """
+    Get the previous ball position (last frame).
+    
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        Previous position (x, y) or None if not available
+    """
+    return state.get('previous_position', None)
+
+
+def get_last_bounce_coords(state: Dict) -> Optional[Tuple[int, int]]:
+    """
+    Get the coordinates of the last detected bounce.
+    
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        Last bounce position (x, y) or None if no bounce detected yet
+    """
+    return state.get('last_bounce_coords', None)
+
+
+def get_velocity_history(state: Dict) -> List[Tuple[float, float, float]]:
+    """
+    Get recent velocity history.
+    
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        List of (dx, dy, magnitude) velocity vectors in chronological order
+    """
+    history = state.get('velocity_history', deque())
+    return list(history)
+
+
+def get_current_velocity(state: Dict) -> Optional[Tuple[float, float, float]]:
+    """
+    Get the most recent velocity vector.
+    
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        Current velocity (dx, dy, magnitude) or None if not available
+    """
+    velocity_history = state.get('velocity_history', deque())
+    if len(velocity_history) > 0:
+        return velocity_history[-1]
+    return None
+
+
+def get_ball_speed(state: Dict) -> Optional[float]:
+    """
+    Get current ball speed (velocity magnitude).
+    
+    Args:
+        state: State dictionary used in detect_bounce()
+    
+    Returns:
+        Speed in pixels/frame or None if not available
+    """
+    vel = get_current_velocity(state)
+    if vel is not None:
+        return vel[2]  # Return magnitude
+    return None
